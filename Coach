@@ -1,0 +1,45 @@
+{
+  "name": "Coach",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Coach's full name"
+    },
+    "bio": {
+      "type": "string",
+      "description": "Short bio / background"
+    },
+    "avatar_url": {
+      "type": "string",
+      "description": "Profile photo URL"
+    },
+    "specialties": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of addiction types or specialties"
+    },
+    "price_per_session": {
+      "type": "string",
+      "description": "e.g. '$60 / session' or 'Free'"
+    },
+    "is_available": {
+      "type": "boolean",
+      "default": true,
+      "description": "Currently accepting bookings"
+    },
+    "calendly_url": {
+      "type": "string",
+      "description": "Optional Calendly or booking link"
+    },
+    "subscription_price": {
+      "type": "string",
+      "description": "e.g. '$99 / month' for ongoing subscription"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}
