@@ -1,0 +1,27 @@
+{
+  "name": "AccountabilityMessage",
+  "type": "object",
+  "properties": {
+    "partnership_id": {
+      "type": "string",
+      "description": "ID of the AccountabilityRequest (accepted) that links the two users"
+    },
+    "from_email": {
+      "type": "string",
+      "description": "Email of the sender"
+    },
+    "from_name": {
+      "type": "string",
+      "description": "Display name of sender"
+    },
+    "content": {
+      "type": "string",
+      "description": "Message content"
+    }
+  },
+  "required": [
+    "partnership_id",
+    "from_email",
+    "content"
+  ]
+}
