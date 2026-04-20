@@ -1,0 +1,216 @@
+import React, { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AnimatePresence } from 'framer-motion';
+import { BookOpen, Plus, Search } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import ResourceCard, { TYPE_CONFIG, STAGE_CONFIG } from '../components/resources/ResourceCard';
+import ResourceForm from '../components/resources/ResourceForm';
+
+const ADDICTION_TYPES = ['all', 'general', 'alcohol', 'nicotine', 'porn', 'drugs', 'gambling', 'food', 'social media'];
+
+export default function Resources() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingResource, setEditingResource] = useState(null);
+  const [stageFilter, setStageFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [addictionFilter, setAddictionFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    base44.auth.me().then(setCurrentUser).catch(() => {});
+  }, []);
+
+  const isAdmin = currentUser?.role === 'admin';
+
+  const { data: resources = [], isLoading } = useQuery({
+    queryKey: ['resources'],
+    queryFn: () => base44.entities.Resource.list('-created_date', 200),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data) => base44.entities.Resource.create(data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['resources'] }); setShowForm(false); },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, ...data }) => base44.entities.Resource.update(id, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['resources'] }); setEditingResource(null); },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => base44.entities.Resource.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['resources'] }),
+  });
+
+  const filtered = resources.filter(r => {
+    if (stageFilter !== 'all' && r.recovery_stage !== stageFilter && r.recovery_stage !== 'all') return false;
+    if (typeFilter !== 'all' && r.type !== typeFilter) return false;
+    if (addictionFilter !== 'all') {
+      const rt = (r.addiction_type || '').toLowerCase();
+      if (addictionFilter === 'general') { if (rt && rt !== 'general') return false; }
+      else if (!rt.includes(addictionFilter)) return false;
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      return r.title.toLowerCase().includes(q) || (r.description || '').toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  // Featured first
+  const sorted = [...filtered].sort((a, b) => (b.is_featured ? 1 : 0) - (a.is_featured ? 1 : 0));
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="font-heading text-2xl md:text-3xl font-bold tracking-tight">Resources</h1>
+          <p className="text-muted-foreground text-sm mt-1">Curated articles, audio guides & meditations for your recovery.</p>
+        </div>
+        {isAdmin && !showForm && !editingResource && (
+          <Button onClick={() => setShowForm(true)} className="bg-primary hover:bg-primary/90 font-heading">
+            <Plus className="w-4 h-4 mr-2" />Add Resource
+          </Button>
+        )}
+      </div>
+
+      {/* Form */}
+      <AnimatePresence mode="wait">
+        {showForm && (
+          <ResourceForm
+            key="create"
+            onSubmit={data => createMutation.mutate(data)}
+            onCancel={() => setShowForm(false)}
+            isSaving={createMutation.isPending}
+          />
+        )}
+        {editingResource && (
+          <ResourceForm
+            key="edit"
+            initial={editingResource}
+            onSubmit={data => updateMutation.mutate({ id: editingResource.id, ...data })}
+            onCancel={() => setEditingResource(null)}
+            isSaving={updateMutation.isPending}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Search resources…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="pl-9 bg-secondary border-border"
+        />
+      </div>
+
+      {/* Filters */}
+      <div className="space-y-3">
+        {/* Recovery Stage */}
+        <div>
+          <p className="text-xs text-muted-foreground font-medium mb-2 uppercase tracking-wide">Recovery Stage</p>
+          <div className="flex gap-2 flex-wrap">
+            {['all', ...Object.keys(STAGE_CONFIG).filter(k => k !== 'all')].map(k => (
+              <button
+                key={k}
+                onClick={() => setStageFilter(k)}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+                  stageFilter === k ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {k === 'all' ? 'All Stages' : STAGE_CONFIG[k].label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Content Type */}
+        <div>
+          <p className="text-xs text-muted-foreground font-medium mb-2 uppercase tracking-wide">Content Type</p>
+          <div className="flex gap-2 flex-wrap">
+            {['all', ...Object.keys(TYPE_CONFIG)].map(k => (
+              <button
+                key={k}
+                onClick={() => setTypeFilter(k)}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+                  typeFilter === k ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {k === 'all' ? 'All Types' : `${TYPE_CONFIG[k].emoji} ${TYPE_CONFIG[k].label}`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Addiction Type */}
+        <div>
+          <p className="text-xs text-muted-foreground font-medium mb-2 uppercase tracking-wide">Addiction Type</p>
+          <div className="flex gap-2 flex-wrap">
+            {ADDICTION_TYPES.map(t => (
+              <button
+                key={t}
+                onClick={() => setAddictionFilter(t)}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium capitalize transition-colors ${
+                  addictionFilter === t ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t === 'all' ? 'All Types' : t}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Results count */}
+      {!isLoading && (
+        <p className="text-xs text-muted-foreground">
+          {sorted.length} resource{sorted.length !== 1 ? 's' : ''} found
+        </p>
+      )}
+
+      {/* Grid */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          {Array(6).fill(0).map((_, i) => (
+            <div key={i} className="bg-card border border-border rounded-xl p-4 space-y-3">
+              <Skeleton className="h-36 w-full rounded-lg" />
+              <Skeleton className="h-5 w-2/3" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-8 w-full" />
+            </div>
+          ))}
+        </div>
+      ) : sorted.length === 0 ? (
+        <div className="text-center py-16">
+          <BookOpen className="w-12 h-12 text-muted-foreground/20 mx-auto mb-4" />
+          <p className="text-muted-foreground font-medium">No resources found</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">
+            {isAdmin ? 'Add your first resource above.' : 'Try adjusting your filters.'}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <AnimatePresence>
+            {sorted.map(r => (
+              <ResourceCard
+                key={r.id}
+                resource={r}
+                isAdmin={isAdmin}
+                onEdit={setEditingResource}
+                onDelete={id => deleteMutation.mutate(id)}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+    </div>
+  );
+}
