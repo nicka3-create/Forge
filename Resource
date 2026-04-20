@@ -1,0 +1,64 @@
+{
+  "name": "Resource",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Resource title"
+    },
+    "description": {
+      "type": "string",
+      "description": "Short description of the resource"
+    },
+    "url": {
+      "type": "string",
+      "description": "Link to the resource"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "article",
+        "audio",
+        "meditation",
+        "video",
+        "tool",
+        "book"
+      ],
+      "default": "article",
+      "description": "Type of resource"
+    },
+    "recovery_stage": {
+      "type": "string",
+      "enum": [
+        "early",
+        "building",
+        "thriving",
+        "all"
+      ],
+      "default": "all",
+      "description": "Recovery stage this resource is best for"
+    },
+    "addiction_type": {
+      "type": "string",
+      "description": "Addiction type this targets e.g. alcohol, nicotine, porn, general"
+    },
+    "duration_label": {
+      "type": "string",
+      "description": "Optional duration e.g. '5 min read' or '20 min audio'"
+    },
+    "image_url": {
+      "type": "string",
+      "description": "Optional thumbnail"
+    },
+    "is_featured": {
+      "type": "boolean",
+      "default": false,
+      "description": "Pin to top of list"
+    }
+  },
+  "required": [
+    "title",
+    "url",
+    "type"
+  ]
+}
