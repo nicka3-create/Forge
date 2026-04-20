@@ -1,0 +1,117 @@
+import { Toaster } from "@/components/ui/toaster"
+import { QueryClientProvider } from '@tanstack/react-query'
+import { queryClientInstance } from '@/lib/query-client'
+import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
+import PageNotFound from './lib/PageNotFound';
+import { AuthProvider, useAuth } from '@/lib/AuthContext';
+import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useEffect } from 'react';
+
+import AppLayout from './components/layout/AppLayout';
+import Dashboard from './pages/Dashboard';
+import Feed from './pages/Feed';
+import NewPost from './pages/NewPost';
+import PostDetail from './pages/PostDetail';
+import MyJourney from './pages/MyJourney';
+import Products from './pages/Products';
+import Coaching from './pages/Coaching';
+import Analytics from './pages/Analytics';
+import Resources from './pages/Resources';
+import Settings from './pages/Settings';
+
+// Auto-apply dark class based on system preference
+function ThemeProvider({ children }) {
+  useEffect(() => {
+    const applyTheme = (dark) => {
+      document.documentElement.classList.toggle('dark', dark);
+    };
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    applyTheme(mq.matches);
+    const handler = (e) => applyTheme(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return children;
+}
+
+// Page slide transition wrapper
+const pageVariants = {
+  initial: { opacity: 0, x: 20 },
+  animate: { opacity: 1, x: 0 },
+  exit:    { opacity: 0, x: -20 },
+};
+const pageTransition = { duration: 0.2, ease: 'easeInOut' };
+
+function AnimatedRoutes() {
+  const location = useLocation();
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={location.pathname}
+        variants={pageVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        transition={pageTransition}
+        style={{ width: '100%' }}
+      >
+        <Routes location={location}>
+          <Route element={<AppLayout />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/feed" element={<Feed />} />
+            <Route path="/new-post" element={<NewPost />} />
+            <Route path="/post/:id" element={<PostDetail />} />
+            <Route path="/my-journey" element={<MyJourney />} />
+            <Route path="/products" element={<Products />} />
+            <Route path="/coaching" element={<Coaching />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/resources" element={<Resources />} />
+            <Route path="/settings" element={<Settings />} />
+          </Route>
+          <Route path="*" element={<PageNotFound />} />
+        </Routes>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+const AuthenticatedApp = () => {
+  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+
+  if (isLoadingPublicSettings || isLoadingAuth) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (authError) {
+    if (authError.type === 'user_not_registered') {
+      return <UserNotRegisteredError />;
+    } else if (authError.type === 'auth_required') {
+      navigateToLogin();
+      return null;
+    }
+  }
+
+  return <AnimatedRoutes />;
+};
+
+function App() {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <QueryClientProvider client={queryClientInstance}>
+          <Router>
+            <AuthenticatedApp />
+          </Router>
+          <Toaster />
+        </QueryClientProvider>
+      </AuthProvider>
+    </ThemeProvider>
+  )
+}
+
+export default App
