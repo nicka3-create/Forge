@@ -1,0 +1,48 @@
+{
+  "name": "Product",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Product name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Short description of the product"
+    },
+    "url": {
+      "type": "string",
+      "description": "Affiliate or product link"
+    },
+    "image_url": {
+      "type": "string",
+      "description": "Product image URL"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "supplement",
+        "book",
+        "tool",
+        "app",
+        "course",
+        "other"
+      ],
+      "default": "other",
+      "description": "Product category"
+    },
+    "is_affiliate": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this is an affiliate link"
+    },
+    "price_label": {
+      "type": "string",
+      "description": "Optional price or discount label e.g. '$29' or '20% off'"
+    }
+  },
+  "required": [
+    "name",
+    "url"
+  ]
+}
