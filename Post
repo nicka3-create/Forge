@@ -1,0 +1,53 @@
+{
+  "name": "Post",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Post title"
+    },
+    "content": {
+      "type": "string",
+      "description": "Post body content"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "journey",
+        "tip",
+        "motivation",
+        "vent"
+      ],
+      "description": "Type of post"
+    },
+    "addiction_type": {
+      "type": "string",
+      "description": "What addiction this relates to"
+    },
+    "author_name": {
+      "type": "string",
+      "description": "Display name of author"
+    },
+    "likes": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of likes"
+    },
+    "liked_by": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Emails of users who liked"
+    },
+    "comments_count": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "title",
+    "content",
+    "type"
+  ]
+}
