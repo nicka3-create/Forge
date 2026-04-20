@@ -1,0 +1,53 @@
+import { differenceInDays } from 'date-fns';
+
+export const BADGES = [
+  { id: 'first_step',   days: 1,   emoji: '👟', label: 'First Step',      desc: '1 day clean',         color: 'from-slate-500 to-slate-600' },
+  { id: 'one_week',     days: 7,   emoji: '🔥', label: 'One Week',        desc: '7 days strong',       color: 'from-orange-500 to-amber-500' },
+  { id: 'fortnight',   days: 14,  emoji: '⚡', label: 'Fortnight',       desc: '2 weeks of power',    color: 'from-yellow-500 to-orange-400' },
+  { id: 'one_month',   days: 30,  emoji: '💎', label: 'One Month',       desc: '30 days — a habit',   color: 'from-cyan-500 to-blue-500' },
+  { id: 'sixty_days',  days: 60,  emoji: '🛡️', label: 'Unbreakable',     desc: '60 days of resilience', color: 'from-indigo-500 to-violet-500' },
+  { id: 'ninety_days', days: 90,  emoji: '🦁', label: 'Lion',            desc: '90 days — you roar',  color: 'from-amber-500 to-red-500' },
+  { id: 'half_year',   days: 180, emoji: '🌟', label: 'Half Year',       desc: '180 days of freedom', color: 'from-pink-500 to-rose-500' },
+  { id: 'one_year',    days: 365, emoji: '🏆', label: 'Champion',        desc: '365 days — legendary', color: 'from-yellow-400 to-amber-500' },
+  { id: 'two_years',   days: 730, emoji: '👑', label: 'Royalty',         desc: '2 years — untouchable', color: 'from-violet-500 to-purple-600' },
+];
+
+export const LEVELS = [
+  { level: 1, label: 'Recruit',     minDays: 0,    color: 'text-slate-400',   ring: 'ring-slate-500/40' },
+  { level: 2, label: 'Fighter',     minDays: 7,    color: 'text-orange-400',  ring: 'ring-orange-500/40' },
+  { level: 3, label: 'Warrior',     minDays: 30,   color: 'text-amber-400',   ring: 'ring-amber-500/40' },
+  { level: 4, label: 'Gladiator',   minDays: 90,   color: 'text-cyan-400',    ring: 'ring-cyan-500/40' },
+  { level: 5, label: 'Titan',       minDays: 180,  color: 'text-violet-400',  ring: 'ring-violet-500/40' },
+  { level: 6, label: 'Legend',      minDays: 365,  color: 'text-yellow-400',  ring: 'ring-yellow-500/40' },
+  { level: 7, label: 'Immortal',    minDays: 730,  color: 'text-pink-400',    ring: 'ring-pink-500/40' },
+];
+
+// Given all streaks, compute the best (longest) day count
+export function getBestDays(streaks) {
+  if (!streaks || streaks.length === 0) return 0;
+  return Math.max(
+    ...streaks.map((s) => differenceInDays(new Date(), new Date(s.start_date)))
+  );
+}
+
+export function getCurrentLevel(bestDays) {
+  let current = LEVELS[0];
+  for (const lvl of LEVELS) {
+    if (bestDays >= lvl.minDays) current = lvl;
+  }
+  return current;
+}
+
+export function getNextLevel(bestDays) {
+  return LEVELS.find((lvl) => lvl.minDays > bestDays) || null;
+}
+
+export function getEarnedBadges(streaks) {
+  const best = getBestDays(streaks);
+  return BADGES.filter((b) => best >= b.days);
+}
+
+export function getLockedBadges(streaks) {
+  const best = getBestDays(streaks);
+  return BADGES.filter((b) => best < b.days);
+}
