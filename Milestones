@@ -1,0 +1,50 @@
+import { differenceInDays, getHours } from 'date-fns';
+
+// ─── All milestone badges ────────────────────────────────────────────────────
+// category: 'streak' | 'checkin' | 'community' | 'special'
+export const MILESTONES = [
+  // Streak milestones
+  { id: 'first_step',     category: 'streak',    emoji: '👟', label: 'First Step',       desc: '1 day clean',                    color: 'from-slate-500 to-slate-600',       check: ({ bestDays }) => bestDays >= 1 },
+  { id: 'one_week',       category: 'streak',    emoji: '🔥', label: 'One Week',          desc: '7 days strong',                  color: 'from-orange-500 to-amber-500',      check: ({ bestDays }) => bestDays >= 7 },
+  { id: 'fortnight',      category: 'streak',    emoji: '⚡', label: 'Fortnight',         desc: '2 weeks of power',               color: 'from-yellow-500 to-orange-400',     check: ({ bestDays }) => bestDays >= 14 },
+  { id: 'one_month',      category: 'streak',    emoji: '💎', label: 'First Month',       desc: '30 days — a habit is born',      color: 'from-cyan-500 to-blue-500',         check: ({ bestDays }) => bestDays >= 30 },
+  { id: 'sixty_days',     category: 'streak',    emoji: '🛡️', label: 'Unbreakable',       desc: '60 days of resilience',          color: 'from-indigo-500 to-violet-500',     check: ({ bestDays }) => bestDays >= 60 },
+  { id: 'ninety_days',    category: 'streak',    emoji: '🦁', label: 'Lion',              desc: '90 days — you roar',             color: 'from-amber-500 to-red-500',         check: ({ bestDays }) => bestDays >= 90 },
+  { id: 'half_year',      category: 'streak',    emoji: '🌟', label: 'Half Year',         desc: '180 days of freedom',            color: 'from-pink-500 to-rose-500',         check: ({ bestDays }) => bestDays >= 180 },
+  { id: 'one_year',       category: 'streak',    emoji: '🏆', label: 'Champion',          desc: '365 days — legendary',           color: 'from-yellow-400 to-amber-500',      check: ({ bestDays }) => bestDays >= 365 },
+  { id: 'two_years',      category: 'streak',    emoji: '👑', label: 'Royalty',           desc: '2 years — untouchable',          color: 'from-violet-500 to-purple-600',     check: ({ bestDays }) => bestDays >= 730 },
+
+  // Check-in milestones
+  { id: 'first_checkin',  category: 'checkin',   emoji: '📓', label: 'First Entry',       desc: 'Logged your first daily check-in', color: 'from-teal-500 to-emerald-500',    check: ({ checkInCount }) => checkInCount >= 1 },
+  { id: 'week_checkins',  category: 'checkin',   emoji: '📅', label: 'Consistent',        desc: '7 days of check-ins logged',     color: 'from-green-500 to-teal-500',        check: ({ checkInCount }) => checkInCount >= 7 },
+  { id: 'month_checkins', category: 'checkin',   emoji: '🗓️', label: 'Journaler',         desc: '30 check-ins completed',         color: 'from-emerald-400 to-cyan-500',      check: ({ checkInCount }) => checkInCount >= 30 },
+  { id: 'early_riser',    category: 'special',   emoji: '🌅', label: 'Early Riser',       desc: 'Logged a check-in before 8 AM',  color: 'from-orange-400 to-yellow-300',     check: ({ journalEntries }) => journalEntries?.some(e => e.created_date && getHours(new Date(e.created_date)) < 8) },
+  { id: 'night_owl',      category: 'special',   emoji: '🦉', label: 'Night Owl',         desc: 'Logged a check-in after 10 PM',  color: 'from-indigo-600 to-slate-700',      check: ({ journalEntries }) => journalEntries?.some(e => e.created_date && getHours(new Date(e.created_date)) >= 22) },
+  { id: 'clarity_king',   category: 'special',   emoji: '🧠', label: 'Clarity King',      desc: 'Logged mental clarity of 10',    color: 'from-cyan-400 to-blue-600',         check: ({ journalEntries }) => journalEntries?.some(e => e.mental_clarity === 10) },
+  { id: 'overcomer',      category: 'special',   emoji: '💪', label: 'Overcomer',         desc: 'Logged addiction strength of 10 and kept going', color: 'from-red-500 to-orange-600', check: ({ journalEntries }) => journalEntries?.some(e => e.addiction_strength === 10) },
+
+  // Community milestones
+  { id: 'first_post',     category: 'community', emoji: '✍️', label: 'Storyteller',       desc: 'Shared your first post',         color: 'from-blue-500 to-indigo-500',       check: ({ postCount }) => postCount >= 1 },
+  { id: 'five_posts',     category: 'community', emoji: '📢', label: 'Voice',             desc: 'Shared 5 posts',                 color: 'from-violet-500 to-blue-500',       check: ({ postCount }) => postCount >= 5 },
+  { id: 'supporter',      category: 'community', emoji: '🤝', label: 'Supporter',         desc: 'Left 5 comments of support',     color: 'from-pink-500 to-fuchsia-500',      check: ({ commentCount }) => commentCount >= 5 },
+  { id: 'accountable',    category: 'community', emoji: '🔗', label: 'Accountable',       desc: 'Connected with an accountability partner', color: 'from-amber-500 to-yellow-400', check: ({ partnerCount }) => partnerCount >= 1 },
+  { id: 'multi_streak',   category: 'special',   emoji: '🎯', label: 'Multi-Front',       desc: 'Tracking 3 or more addictions',  color: 'from-rose-500 to-pink-600',         check: ({ streakCount }) => streakCount >= 3 },
+];
+
+export const MILESTONE_CATEGORIES = {
+  streak:    { label: 'Streak',    icon: '🔥' },
+  checkin:   { label: 'Check-Ins', icon: '📓' },
+  community: { label: 'Community', icon: '🤝' },
+  special:   { label: 'Special',   icon: '✨' },
+};
+
+// Given user data, return which badge IDs should be earned
+export function computeEarnedIds(data) {
+  return MILESTONES.filter(m => {
+    try { return m.check(data); } catch { return false; }
+  }).map(m => m.id);
+}
+
+export function getMilestoneById(id) {
+  return MILESTONES.find(m => m.id === id);
+}
