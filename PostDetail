@@ -1,0 +1,249 @@
+import React, { useState, useEffect } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ArrowLeft, Heart, Flame, Lightbulb, Megaphone, CloudLightning, Send } from 'lucide-react';
+import { format } from 'date-fns';
+import { motion } from 'framer-motion';
+
+const typeConfig = {
+  journey: { icon: Flame, label: 'Journey', color: 'bg-primary/15 text-primary border-primary/20' },
+  tip: { icon: Lightbulb, label: 'Tip', color: 'bg-amber-500/15 text-amber-400 border-amber-500/20' },
+  motivation: { icon: Megaphone, label: 'Motivation', color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20' },
+  vent: { icon: CloudLightning, label: 'Vent', color: 'bg-violet-500/15 text-violet-400 border-violet-500/20' },
+};
+
+export default function PostDetail() {
+  const { id } = useParams();
+  const queryClient = useQueryClient();
+  const [currentUser, setCurrentUser] = useState(null);
+  const [comment, setComment] = useState('');
+
+  useEffect(() => {
+    base44.auth.me().then(setCurrentUser).catch(() => {});
+  }, []);
+
+  const { data: posts, isLoading: isLoadingPost } = useQuery({
+    queryKey: ['post', id],
+    queryFn: () => base44.entities.Post.filter({ id }),
+    initialData: [],
+  });
+  const post = posts[0];
+
+  const { data: comments, isLoading: isLoadingComments } = useQuery({
+    queryKey: ['comments', id],
+    queryFn: () => base44.entities.Comment.filter({ post_id: id }, '-created_date', 100),
+    initialData: [],
+    enabled: !!id,
+  });
+
+  // ── Optimistic like mutation ──────────────────────────────────────────────
+  const likeMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentUser || !post) return;
+      const likedBy = post.liked_by || [];
+      const isLiked = likedBy.includes(currentUser.email);
+      const newLikedBy = isLiked
+        ? likedBy.filter((e) => e !== currentUser.email)
+        : [...likedBy, currentUser.email];
+      await base44.entities.Post.update(post.id, { liked_by: newLikedBy, likes: newLikedBy.length });
+    },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['post', id] });
+      const previous = queryClient.getQueryData(['post', id]);
+      queryClient.setQueryData(['post', id], (old = []) =>
+        old.map((p) => {
+          if (p.id !== id) return p;
+          const likedBy = p.liked_by || [];
+          const isLiked = likedBy.includes(currentUser?.email);
+          const newLikedBy = isLiked
+            ? likedBy.filter((e) => e !== currentUser.email)
+            : [...likedBy, currentUser?.email];
+          return { ...p, liked_by: newLikedBy, likes: newLikedBy.length };
+        })
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(['post', id], ctx.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['post', id] }),
+  });
+
+  // ── Optimistic comment mutation ───────────────────────────────────────────
+  const commentMutation = useMutation({
+    mutationFn: async () => {
+      if (!comment.trim()) return;
+      await base44.entities.Comment.create({
+        post_id: id,
+        content: comment.trim(),
+        author_name: currentUser?.full_name || 'Anonymous',
+      });
+      await base44.entities.Post.update(id, { comments_count: (post?.comments_count || 0) + 1 });
+    },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['comments', id] });
+      const previousComments = queryClient.getQueryData(['comments', id]);
+      const optimisticComment = {
+        id: `optimistic-${Date.now()}`,
+        post_id: id,
+        content: comment.trim(),
+        author_name: currentUser?.full_name || 'Anonymous',
+        created_date: new Date().toISOString(),
+      };
+      queryClient.setQueryData(['comments', id], (old = []) => [optimisticComment, ...old]);
+      setComment('');
+      return { previousComments };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previousComments) queryClient.setQueryData(['comments', id], ctx.previousComments);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['comments', id] });
+      queryClient.invalidateQueries({ queryKey: ['post', id] });
+    },
+  });
+
+  if (isLoadingPost) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-4">
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-6 w-3/4" />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
+
+  if (!post) {
+    return (
+      <div className="text-center py-16">
+        <p className="text-muted-foreground">Post not found.</p>
+        <Link to="/" className="text-primary text-sm mt-2 inline-block">Back to feed</Link>
+      </div>
+    );
+  }
+
+  const config = typeConfig[post.type] || typeConfig.journey;
+  const Icon = config.icon;
+  const isLiked = post.liked_by?.includes(currentUser?.email);
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+      {/* Back */}
+      <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <ArrowLeft className="w-4 h-4" />
+        Back to feed
+      </Link>
+
+      {/* Post */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-card border border-border rounded-xl p-6"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-sm font-bold font-heading">
+              {(post.author_name || 'A')[0].toUpperCase()}
+            </div>
+            <div>
+              <p className="font-medium">{post.author_name || 'Anonymous'}</p>
+              <p className="text-xs text-muted-foreground">
+                {post.created_date ? format(new Date(post.created_date), 'MMM d, yyyy · h:mm a') : ''}
+              </p>
+            </div>
+          </div>
+          <Badge variant="outline" className={`${config.color} border`}>
+            <Icon className="w-3 h-3 mr-1" />
+            {config.label}
+          </Badge>
+        </div>
+
+        <h1 className="font-heading text-2xl font-bold mb-4">{post.title}</h1>
+
+        {post.addiction_type && (
+          <span className="inline-block text-xs bg-secondary px-2.5 py-1 rounded-full text-secondary-foreground mb-4">
+            {post.addiction_type}
+          </span>
+        )}
+
+        <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap">{post.content}</p>
+
+        <div className="flex items-center gap-4 pt-4 mt-4 border-t border-border">
+          <button
+            onClick={() => likeMutation.mutate()}
+            className={`flex items-center gap-1.5 text-sm transition-all ${
+              isLiked ? 'text-primary' : 'text-muted-foreground hover:text-primary'
+            }`}
+          >
+            <Heart className={`w-4 h-4 ${isLiked ? 'fill-primary' : ''}`} />
+            <span>{post.likes || 0} {post.likes === 1 ? 'like' : 'likes'}</span>
+          </button>
+        </div>
+      </motion.div>
+
+      {/* Comments */}
+      <div className="space-y-4">
+        <h2 className="font-heading font-semibold text-lg">Comments ({comments.length})</h2>
+
+        {/* New comment */}
+        <div className="flex gap-3">
+          <Textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Drop some encouragement..."
+            className="bg-secondary border-border flex-1 min-h-[80px]"
+          />
+        </div>
+        <Button
+          onClick={() => commentMutation.mutate()}
+          disabled={!comment.trim() || commentMutation.isPending}
+          className="bg-primary hover:bg-primary/90 font-heading"
+        >
+          <Send className="w-4 h-4 mr-2" />
+          {commentMutation.isPending ? 'Posting...' : 'Comment'}
+        </Button>
+
+        {/* Comments list */}
+        <div className="space-y-3">
+          {isLoadingComments ? (
+            Array(3).fill(0).map((_, i) => (
+              <div key={i} className="bg-card border border-border rounded-xl p-4 space-y-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-full" />
+              </div>
+            ))
+          ) : comments.length === 0 ? (
+            <p className="text-muted-foreground text-sm text-center py-8">
+              No comments yet. Be the first to show support.
+            </p>
+          ) : (
+            comments.map((c) => (
+              <motion.div
+                key={c.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-card border border-border rounded-xl p-4"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-xs font-bold font-heading">
+                    {(c.author_name || 'A')[0].toUpperCase()}
+                  </div>
+                  <p className="text-sm font-medium">{c.author_name || 'Anonymous'}</p>
+                  <span className="text-xs text-muted-foreground">
+                    {c.created_date ? format(new Date(c.created_date), 'MMM d') : ''}
+                  </span>
+                </div>
+                <p className="text-sm text-foreground/90 leading-relaxed">{c.content}</p>
+              </motion.div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
