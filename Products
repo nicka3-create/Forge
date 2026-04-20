@@ -1,0 +1,275 @@
+import React, { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ShoppingBag, Plus, ExternalLink, Tag, Pencil, Trash2, X, Check } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const CATEGORY_LABELS = {
+  supplement: { label: 'Supplement', color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20' },
+  book:        { label: 'Book',       color: 'bg-amber-500/15 text-amber-400 border-amber-500/20' },
+  tool:        { label: 'Tool',       color: 'bg-blue-500/15 text-blue-400 border-blue-500/20' },
+  app:         { label: 'App',        color: 'bg-violet-500/15 text-violet-400 border-violet-500/20' },
+  course:      { label: 'Course',     color: 'bg-pink-500/15 text-pink-400 border-pink-500/20' },
+  other:       { label: 'Other',      color: 'bg-secondary text-muted-foreground border-border' },
+};
+
+const EMPTY_FORM = { name: '', description: '', url: '', image_url: '', category: 'other', is_affiliate: false, price_label: '' };
+
+function ProductForm({ initial = EMPTY_FORM, onSubmit, onCancel, isSaving }) {
+  const [form, setForm] = useState(initial);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      className="bg-card border border-border rounded-xl p-5 space-y-4"
+    >
+      <h3 className="font-heading font-bold text-base">{initial.id ? 'Edit Product' : 'Add Product'}</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Input placeholder="Product name *" value={form.name} onChange={(e) => set('name', e.target.value)} className="bg-secondary border-border" />
+        <Input placeholder="Link / URL *" value={form.url} onChange={(e) => set('url', e.target.value)} className="bg-secondary border-border" />
+        <Input placeholder="Image URL (optional)" value={form.image_url} onChange={(e) => set('image_url', e.target.value)} className="bg-secondary border-border" />
+        <Input placeholder="Price label e.g. $29 or 20% off" value={form.price_label} onChange={(e) => set('price_label', e.target.value)} className="bg-secondary border-border" />
+        <Select value={form.category} onValueChange={(v) => set('category', v)}>
+          <SelectTrigger className="bg-secondary border-border">
+            <SelectValue placeholder="Category" />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(CATEGORY_LABELS).map(([k, { label }]) => (
+              <SelectItem key={k} value={k}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <label className="flex items-center gap-2 cursor-pointer px-1">
+          <input
+            type="checkbox"
+            checked={form.is_affiliate}
+            onChange={(e) => set('is_affiliate', e.target.checked)}
+            className="accent-primary w-4 h-4"
+          />
+          <span className="text-sm text-muted-foreground">Affiliate link</span>
+        </label>
+      </div>
+      <Textarea
+        placeholder="Short description (optional)"
+        value={form.description}
+        onChange={(e) => set('description', e.target.value)}
+        className="bg-secondary border-border min-h-[64px]"
+      />
+      <div className="flex gap-2 justify-end">
+        <Button variant="ghost" size="sm" onClick={onCancel}><X className="w-4 h-4 mr-1" />Cancel</Button>
+        <Button
+          size="sm"
+          disabled={!form.name.trim() || !form.url.trim() || isSaving}
+          onClick={() => onSubmit(form)}
+          className="bg-primary hover:bg-primary/90 font-heading"
+        >
+          <Check className="w-4 h-4 mr-1" />
+          {isSaving ? 'Saving…' : 'Save'}
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
+
+function ProductCard({ product, isAdmin, onEdit, onDelete }) {
+  const cat = CATEGORY_LABELS[product.category] || CATEGORY_LABELS.other;
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="bg-card border border-border rounded-xl overflow-hidden flex flex-col"
+    >
+      {product.image_url && (
+        <div className="h-40 overflow-hidden bg-secondary">
+          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+        </div>
+      )}
+      <div className="p-4 flex flex-col flex-1 gap-2">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-heading font-bold text-base leading-tight">{product.name}</h3>
+          <div className="flex gap-1 shrink-0">
+            {isAdmin && (
+              <>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => onEdit(product)}>
+                  <Pencil className="w-3.5 h-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => onDelete(product.id)}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          <Badge variant="outline" className={`${cat.color} border text-xs`}>{cat.label}</Badge>
+          {product.is_affiliate && (
+            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs">Affiliate</Badge>
+          )}
+          {product.price_label && (
+            <Badge variant="outline" className="bg-secondary text-muted-foreground border-border text-xs">
+              <Tag className="w-3 h-3 mr-1" />{product.price_label}
+            </Badge>
+          )}
+        </div>
+
+        {product.description && (
+          <p className="text-sm text-muted-foreground leading-relaxed flex-1">{product.description}</p>
+        )}
+
+        <a
+          href={product.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-auto inline-flex items-center justify-center gap-2 w-full bg-primary/10 hover:bg-primary/20 text-primary text-sm font-heading font-semibold rounded-lg px-4 py-2.5 transition-colors"
+        >
+          <ExternalLink className="w-4 h-4" />
+          Visit {product.is_affiliate ? '(Affiliate)' : 'Link'}
+        </a>
+      </div>
+    </motion.div>
+  );
+}
+
+export default function Products() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    base44.auth.me().then(setCurrentUser).catch(() => {});
+  }, []);
+
+  const isAdmin = currentUser?.role === 'admin';
+
+  const { data: products, isLoading } = useQuery({
+    queryKey: ['products'],
+    queryFn: () => base44.entities.Product.list('-created_date', 100),
+    initialData: [],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data) => base44.entities.Product.create(data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['products'] }); setShowForm(false); },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, ...data }) => base44.entities.Product.update(id, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['products'] }); setEditingProduct(null); },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => base44.entities.Product.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
+  });
+
+  const filtered = categoryFilter === 'all' ? products : products.filter((p) => p.category === categoryFilter);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-heading text-2xl md:text-3xl font-bold tracking-tight">Products</h1>
+          <p className="text-muted-foreground text-sm mt-1">Recommended tools & resources for your recovery.</p>
+        </div>
+        {isAdmin && !showForm && !editingProduct && (
+          <Button onClick={() => setShowForm(true)} className="bg-primary hover:bg-primary/90 font-heading">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Product
+          </Button>
+        )}
+      </div>
+
+      {/* Add / Edit Form */}
+      <AnimatePresence mode="wait">
+        {showForm && (
+          <ProductForm
+            key="create"
+            onSubmit={(data) => createMutation.mutate(data)}
+            onCancel={() => setShowForm(false)}
+            isSaving={createMutation.isPending}
+          />
+        )}
+        {editingProduct && (
+          <ProductForm
+            key="edit"
+            initial={editingProduct}
+            onSubmit={(data) => updateMutation.mutate({ id: editingProduct.id, ...data })}
+            onCancel={() => setEditingProduct(null)}
+            isSaving={updateMutation.isPending}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Category filter */}
+      <div className="flex gap-2 flex-wrap">
+        {['all', ...Object.keys(CATEGORY_LABELS)].map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setCategoryFilter(cat)}
+            className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+              categoryFilter === cat
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-secondary text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {cat === 'all' ? 'All' : CATEGORY_LABELS[cat].label}
+          </button>
+        ))}
+      </div>
+
+      {/* Grid */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          {Array(6).fill(0).map((_, i) => (
+            <div key={i} className="bg-card border border-border rounded-xl p-4 space-y-3">
+              <Skeleton className="h-40 w-full rounded-lg" />
+              <Skeleton className="h-5 w-2/3" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-9 w-full" />
+            </div>
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16">
+          <ShoppingBag className="w-12 h-12 text-muted-foreground/20 mx-auto mb-4" />
+          <p className="text-muted-foreground">No products yet.</p>
+          {isAdmin && <p className="text-xs text-muted-foreground/60 mt-1">Add your first product above.</p>}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <AnimatePresence>
+            {filtered.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                isAdmin={isAdmin}
+                onEdit={setEditingProduct}
+                onDelete={(id) => deleteMutation.mutate(id)}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Affiliate disclosure */}
+      {products.some((p) => p.is_affiliate) && (
+        <p className="text-xs text-muted-foreground/50 text-center pt-2">
+          * Some links are affiliate links. We may earn a commission at no extra cost to you.
+        </p>
+      )}
+    </div>
+  );
+}
