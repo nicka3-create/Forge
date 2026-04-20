@@ -1,0 +1,63 @@
+import { useState, useEffect, useCallback } from 'react';
+import { base44 } from '@/api/base44Client';
+import { computeEarnedIds, getMilestoneById } from '@/lib/milestones';
+import { differenceInDays } from 'date-fns';
+
+/**
+ * Computes which milestones the user has earned, persists new ones,
+ * and returns the next unseen badge to celebrate.
+ */
+export function useMilestones({ currentUser, streaks, journalEntries, enabled = true }) {
+  const [newBadge, setNewBadge] = useState(null);
+
+  const check = useCallback(async () => {
+    if (!currentUser || !enabled) return;
+
+    // Gather data for checks
+    const bestDays = streaks?.length
+      ? Math.max(...streaks.map(s => differenceInDays(new Date(), new Date(s.start_date))))
+      : 0;
+
+    const [posts, comments, partners] = await Promise.all([
+      base44.entities.Post.filter({ created_by: currentUser.email }),
+      base44.entities.Comment.filter({ created_by: currentUser.email }),
+      base44.entities.AccountabilityRequest.filter({ from_email: currentUser.email, status: 'accepted' }),
+    ]);
+
+    const data = {
+      bestDays,
+      streakCount: streaks?.length || 0,
+      checkInCount: journalEntries?.length || 0,
+      journalEntries: journalEntries || [],
+      postCount: posts.length,
+      commentCount: comments.length,
+      partnerCount: partners.length,
+    };
+
+    const earnedIds = computeEarnedIds(data);
+
+    // Fetch already-stored milestones for this user
+    const stored = await base44.entities.UserMilestone.filter({ user_email: currentUser.email });
+    const storedIds = stored.map(m => m.badge_id);
+
+    // Find newly earned ones not yet stored
+    const newlyEarned = earnedIds.filter(id => !storedIds.includes(id));
+
+    if (newlyEarned.length > 0) {
+      // Persist all new ones
+      await Promise.all(newlyEarned.map(badge_id =>
+        base44.entities.UserMilestone.create({ badge_id, user_email: currentUser.email, seen: false })
+      ));
+
+      // Show the first unseen celebration
+      const badge = getMilestoneById(newlyEarned[0]);
+      if (badge) setNewBadge(badge);
+    }
+  }, [currentUser, streaks, journalEntries, enabled]);
+
+  useEffect(() => {
+    check();
+  }, [check]);
+
+  return { newBadge, clearNewBadge: () => setNewBadge(null) };
+}
