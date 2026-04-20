@@ -1,0 +1,32 @@
+{
+  "name": "JournalEntry",
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "The date of this journal entry (YYYY-MM-DD)"
+    },
+    "addiction_strength": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 10,
+      "description": "How strong the urge/addiction felt today (1=weak, 10=overwhelming)"
+    },
+    "mental_clarity": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 10,
+      "description": "Mental clarity / how good you felt today (1=foggy, 10=crystal clear)"
+    },
+    "note": {
+      "type": "string",
+      "description": "Optional short note for the day"
+    }
+  },
+  "required": [
+    "date",
+    "addiction_strength",
+    "mental_clarity"
+  ]
+}
