@@ -1,0 +1,256 @@
+import React, { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { differenceInDays, format } from 'date-fns';
+import { motion } from 'framer-motion';
+import { Flame, Zap, Target, BookOpen, ArrowRight, CheckCircle2, BarChart2, Users, PenLine } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const RECOVERY_GOALS = {
+  sobriety_streak:   { label: 'Sobriety Streak',        icon: '🔥', path: '/my-journey' },
+  daily_checkin:     { label: 'Daily Check-In',          icon: '📋', path: '/my-journey' },
+  reduce_cravings:   { label: 'Reduce Cravings',         icon: '💪', path: '/my-journey' },
+  mental_clarity:    { label: 'Mental Clarity',          icon: '🧠', path: '/analytics' },
+  community_support: { label: 'Community Support',       icon: '🤝', path: '/' },
+  accountability:    { label: 'Accountability Partner',  icon: '👥', path: '/my-journey' },
+  learn_resources:   { label: 'Learn & Grow',            icon: '📚', path: '/resources' },
+  physical_health:   { label: 'Physical Health',         icon: '🏃', path: '/my-journey' },
+  journaling:        { label: 'Daily Journaling',        icon: '📝', path: '/my-journey' },
+  professional_help: { label: 'Professional Coaching',   icon: '🎯', path: '/coaching' },
+};
+
+function QuickAction({ icon: Icon, label, path, color }) {
+  return (
+    <Link to={path} className="flex flex-col items-center gap-2 p-4 bg-card border border-border rounded-xl hover:border-primary/40 hover:bg-primary/5 transition-all group">
+      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${color}`}>
+        <Icon className="w-5 h-5" />
+      </div>
+      <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground text-center leading-tight">{label}</span>
+    </Link>
+  );
+}
+
+function StreakMini({ streak }) {
+  const days = differenceInDays(new Date(), new Date(streak.start_date));
+  const getEmoji = () => {
+    if (days >= 365) return '🏆';
+    if (days >= 90) return '🔥🔥🔥';
+    if (days >= 30) return '🔥🔥';
+    if (days >= 7) return '🔥';
+    return '💪';
+  };
+  return (
+    <div className="flex items-center justify-between bg-secondary/60 rounded-xl px-4 py-3">
+      <div className="flex items-center gap-3">
+        <span className="text-xl">{getEmoji()}</span>
+        <div>
+          <p className="font-heading font-semibold text-sm capitalize">{streak.addiction_type}</p>
+          <p className="text-xs text-muted-foreground">Since {format(new Date(streak.start_date), 'MMM d, yyyy')}</p>
+        </div>
+      </div>
+      <div className="text-right">
+        <p className="font-heading font-black text-2xl text-primary">{days}</p>
+        <p className="text-xs text-muted-foreground">days</p>
+      </div>
+    </div>
+  );
+}
+
+export default function Dashboard() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const today = format(new Date(), 'yyyy-MM-dd');
+
+  useEffect(() => {
+    base44.auth.me().then(setCurrentUser).catch(() => {});
+  }, []);
+
+  const { data: streaks = [], isLoading: loadingStreaks } = useQuery({
+    queryKey: ['streaks', currentUser?.email],
+    queryFn: () => base44.entities.Streak.filter({ created_by: currentUser.email }),
+    enabled: !!currentUser,
+  });
+
+  const { data: journalEntries = [] } = useQuery({
+    queryKey: ['journal-dash', currentUser?.email],
+    queryFn: () => base44.entities.JournalEntry.filter({ created_by: currentUser.email }, '-date', 7),
+    enabled: !!currentUser,
+  });
+
+  const { data: posts = [] } = useQuery({
+    queryKey: ['posts-dash'],
+    queryFn: () => base44.entities.Post.list('-created_date', 3),
+  });
+
+  const checkedInToday = journalEntries.some(e => e.date === today);
+  const userGoals = (currentUser?.recovery_goals || []).slice(0, 6);
+  const activeStreaks = streaks.filter(s => s.is_active !== false);
+  const bestStreak = activeStreaks.reduce((best, s) => {
+    const d = differenceInDays(new Date(), new Date(s.start_date));
+    return d > best ? d : best;
+  }, 0);
+
+  const greeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Greeting */}
+      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="flex items-center gap-2 mb-1">
+          <Flame className="w-5 h-5 text-primary" />
+          <span className="text-sm font-medium text-primary uppercase tracking-widest font-heading">Dashboard</span>
+        </div>
+        <h1 className="font-heading text-2xl md:text-3xl font-black tracking-tight">
+          {greeting()}, {currentUser?.full_name?.split(' ')[0] || 'Fighter'} 👊
+        </h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          {checkedInToday ? "You've checked in today. Keep the momentum." : "Don't forget to log today's check-in."}
+        </p>
+      </motion.div>
+
+      {/* Stat cards */}
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
+        className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Best Streak', value: `${bestStreak}d`, sub: 'days clean', color: 'text-primary' },
+          { label: 'Active Streaks', value: activeStreaks.length, sub: 'in progress', color: 'text-amber-400' },
+          { label: 'Goals Set', value: userGoals.length, sub: 'recovery goals', color: 'text-emerald-400' },
+          { label: "Today's Check-In", value: checkedInToday ? '✓' : '–', sub: checkedInToday ? 'logged' : 'pending', color: checkedInToday ? 'text-emerald-400' : 'text-muted-foreground' },
+        ].map((stat, i) => (
+          <div key={i} className="bg-card border border-border rounded-xl p-4 text-center">
+            <p className={`font-heading font-black text-2xl ${stat.color}`}>{stat.value}</p>
+            <p className="font-heading font-semibold text-xs mt-0.5">{stat.label}</p>
+            <p className="text-xs text-muted-foreground">{stat.sub}</p>
+          </div>
+        ))}
+      </motion.div>
+
+      {/* Active streaks */}
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+        className="bg-card border border-border rounded-xl p-5 space-y-3">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-primary" />
+            <h2 className="font-heading font-bold text-base">Active Streaks</h2>
+          </div>
+          <Link to="/my-journey" className="text-xs text-primary hover:underline flex items-center gap-1">
+            View all <ArrowRight className="w-3 h-3" />
+          </Link>
+        </div>
+
+        {loadingStreaks ? (
+          <div className="space-y-2">
+            {[1,2].map(i => <Skeleton key={i} className="h-14 w-full rounded-xl" />)}
+          </div>
+        ) : activeStreaks.length === 0 ? (
+          <div className="text-center py-6">
+            <p className="text-muted-foreground text-sm">No active streaks yet.</p>
+            <Link to="/my-journey" className="text-primary text-xs mt-1 inline-block hover:underline">Start your first streak →</Link>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {activeStreaks.slice(0, 4).map(s => <StreakMini key={s.id} streak={s} />)}
+          </div>
+        )}
+      </motion.div>
+
+      {/* Today's Recovery Goals */}
+      {userGoals.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+          className="bg-card border border-border rounded-xl p-5 space-y-3">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <Target className="w-4 h-4 text-primary" />
+              <h2 className="font-heading font-bold text-base">Today's Goals</h2>
+            </div>
+            <Link to="/settings" className="text-xs text-primary hover:underline flex items-center gap-1">
+              Edit <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {userGoals.map(goalId => {
+              const goal = RECOVERY_GOALS[goalId];
+              if (!goal) return null;
+              const isDone = goalId === 'daily_checkin' && checkedInToday;
+              return (
+                <Link
+                  key={goalId}
+                  to={goal.path}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
+                    isDone ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-border bg-secondary/40 hover:bg-secondary'
+                  }`}
+                >
+                  <span className="text-lg">{goal.icon}</span>
+                  <span className={`text-sm font-heading font-semibold flex-1 ${isDone ? 'text-emerald-400' : 'text-foreground'}`}>
+                    {goal.label}
+                  </span>
+                  {isDone && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+                  {!isDone && <ArrowRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                </Link>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
+
+      {/* No goals prompt */}
+      {userGoals.length === 0 && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}
+          className="bg-card border border-primary/20 rounded-xl p-6 text-center space-y-2">
+          <Target className="w-8 h-8 text-primary/50 mx-auto" />
+          <p className="font-heading font-semibold">Set your recovery goals</p>
+          <p className="text-sm text-muted-foreground">Choose what you want to focus on and they'll appear here every day.</p>
+          <Link to="/settings" className="inline-flex items-center gap-1.5 mt-2 text-sm text-primary font-heading font-semibold hover:underline">
+            Go to Settings <ArrowRight className="w-4 h-4" />
+          </Link>
+        </motion.div>
+      )}
+
+      {/* Quick actions */}
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+        <h2 className="font-heading font-bold text-sm text-muted-foreground uppercase tracking-wide mb-3">Quick Actions</h2>
+        <div className="grid grid-cols-4 gap-3">
+          <QuickAction icon={PenLine}   label="New Post"    path="/new-post"    color="bg-primary/15 text-primary" />
+          <QuickAction icon={Zap}       label="My Journey"  path="/my-journey"  color="bg-amber-500/15 text-amber-400" />
+          <QuickAction icon={BarChart2} label="Analytics"   path="/analytics"   color="bg-violet-500/15 text-violet-400" />
+          <QuickAction icon={BookOpen}  label="Resources"   path="/resources"   color="bg-teal-500/15 text-teal-400" />
+        </div>
+      </motion.div>
+
+      {/* Latest community posts */}
+      {posts.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+          className="bg-card border border-border rounded-xl p-5 space-y-3">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-primary" />
+              <h2 className="font-heading font-bold text-base">Latest from Community</h2>
+            </div>
+            <Link to="/feed" className="text-xs text-primary hover:underline flex items-center gap-1">
+              See all <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {posts.map(post => (
+              <Link key={post.id} to={`/post/${post.id}`}
+                className="flex items-start gap-3 p-3 rounded-xl bg-secondary/40 hover:bg-secondary transition-colors">
+                <div className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-xs font-bold font-heading shrink-0">
+                  {(post.author_name || 'A')[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-heading font-semibold truncate">{post.title}</p>
+                  <p className="text-xs text-muted-foreground truncate">{post.author_name || 'Anonymous'}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </motion.div>
+      )}
+    </div>
+  );
+}
