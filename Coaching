@@ -1,0 +1,370 @@
+import React, { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  UserCheck, Plus, Calendar, Clock, X, Check, Pencil, Trash2,
+  Star, ExternalLink, RefreshCw, ChevronDown, ChevronUp
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { format } from 'date-fns';
+
+const STATUS_COLORS = {
+  pending:   'bg-amber-500/15 text-amber-400 border-amber-500/20',
+  confirmed: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
+  cancelled: 'bg-destructive/15 text-destructive border-destructive/20',
+};
+
+const TIMES = [
+  '8:00 AM','9:00 AM','10:00 AM','11:00 AM','12:00 PM',
+  '1:00 PM','2:00 PM','3:00 PM','4:00 PM','5:00 PM','6:00 PM','7:00 PM',
+];
+
+// ─── Coach Form (admin only) ─────────────────────────────────────────────────
+const EMPTY_COACH = { name: '', bio: '', avatar_url: '', specialties: '', price_per_session: '', subscription_price: '', calendly_url: '', is_available: true };
+
+function CoachForm({ initial = EMPTY_COACH, onSubmit, onCancel, isSaving }) {
+  const [form, setForm] = useState({ ...initial, specialties: Array.isArray(initial.specialties) ? initial.specialties.join(', ') : (initial.specialties || '') });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleSubmit = () => {
+    onSubmit({
+      ...form,
+      specialties: form.specialties.split(',').map(s => s.trim()).filter(Boolean),
+    });
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+      className="bg-card border border-border rounded-xl p-5 space-y-4">
+      <h3 className="font-heading font-bold">{initial.id ? 'Edit Coach' : 'Add Coach'}</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Input placeholder="Full name *" value={form.name} onChange={e => set('name', e.target.value)} className="bg-secondary border-border" />
+        <Input placeholder="Avatar URL" value={form.avatar_url} onChange={e => set('avatar_url', e.target.value)} className="bg-secondary border-border" />
+        <Input placeholder="Price per session e.g. $60 / session" value={form.price_per_session} onChange={e => set('price_per_session', e.target.value)} className="bg-secondary border-border" />
+        <Input placeholder="Subscription price e.g. $99 / month" value={form.subscription_price} onChange={e => set('subscription_price', e.target.value)} className="bg-secondary border-border" />
+        <Input placeholder="Calendly / booking link (optional)" value={form.calendly_url} onChange={e => set('calendly_url', e.target.value)} className="bg-secondary border-border" />
+        <Input placeholder="Specialties (comma-separated)" value={form.specialties} onChange={e => set('specialties', e.target.value)} className="bg-secondary border-border" />
+      </div>
+      <Textarea placeholder="Bio / background" value={form.bio} onChange={e => set('bio', e.target.value)} className="bg-secondary border-border min-h-[72px]" />
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" checked={form.is_available} onChange={e => set('is_available', e.target.checked)} className="accent-primary w-4 h-4" />
+        <span className="text-sm text-muted-foreground">Available for bookings</span>
+      </label>
+      <div className="flex gap-2 justify-end">
+        <Button variant="ghost" size="sm" onClick={onCancel}><X className="w-4 h-4 mr-1" />Cancel</Button>
+        <Button size="sm" disabled={!form.name.trim() || isSaving} onClick={handleSubmit} className="bg-primary hover:bg-primary/90 font-heading">
+          <Check className="w-4 h-4 mr-1" />{isSaving ? 'Saving…' : 'Save'}
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Book Session Modal ──────────────────────────────────────────────────────
+function BookingForm({ coach, currentUser, onSubmit, onCancel, isSaving }) {
+  const [form, setForm] = useState({ requested_date: '', requested_time: '10:00 AM', session_type: 'one-time', notes: '' });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md space-y-4 shadow-2xl">
+        <div className="flex items-center justify-between">
+          <h3 className="font-heading font-bold text-lg">Book with {coach.name}</h3>
+          <Button variant="ghost" size="icon" onClick={onCancel}><X className="w-4 h-4" /></Button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5 col-span-2 md:col-span-1">
+            <label className="text-xs text-muted-foreground">Preferred Date</label>
+            <Input type="date" value={form.requested_date} onChange={e => set('requested_date', e.target.value)} className="bg-secondary border-border" min={format(new Date(), 'yyyy-MM-dd')} />
+          </div>
+          <div className="space-y-1.5 col-span-2 md:col-span-1">
+            <label className="text-xs text-muted-foreground">Preferred Time</label>
+            <Select value={form.requested_time} onValueChange={v => set('requested_time', v)}>
+              <SelectTrigger className="bg-secondary border-border"><SelectValue /></SelectTrigger>
+              <SelectContent>{TIMES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">Session Type</label>
+          <div className="flex gap-2">
+            {['one-time', 'subscription'].map(type => (
+              <button key={type} onClick={() => set('session_type', type)}
+                className={`flex-1 text-sm py-2 rounded-lg font-medium transition-colors border ${form.session_type === type ? 'bg-primary/20 border-primary/40 text-primary' : 'bg-secondary border-border text-muted-foreground hover:text-foreground'}`}>
+                {type === 'one-time' ? '🎯 One-Time' : '🔄 Subscribe'}
+              </button>
+            ))}
+          </div>
+          {form.session_type === 'subscription' && coach.subscription_price && (
+            <p className="text-xs text-primary">{coach.subscription_price} — ongoing weekly sessions</p>
+          )}
+          {form.session_type === 'one-time' && coach.price_per_session && (
+            <p className="text-xs text-muted-foreground">{coach.price_per_session}</p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">Notes for your coach (optional)</label>
+          <Textarea value={form.notes} onChange={e => set('notes', e.target.value)}
+            placeholder="What are you struggling with? What do you want to work on?"
+            className="bg-secondary border-border min-h-[72px]" />
+        </div>
+
+        <Button
+          disabled={!form.requested_date || isSaving}
+          onClick={() => onSubmit(form)}
+          className="w-full bg-primary hover:bg-primary/90 font-heading font-semibold"
+        >
+          <Calendar className="w-4 h-4 mr-2" />
+          {isSaving ? 'Booking…' : 'Request Session'}
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Coach Card ──────────────────────────────────────────────────────────────
+function CoachCard({ coach, currentUser, isAdmin, onEdit, onDelete, onBook }) {
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
+      className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4">
+      <div className="flex items-start gap-4">
+        {coach.avatar_url ? (
+          <img src={coach.avatar_url} alt={coach.name} className="w-14 h-14 rounded-full object-cover shrink-0 ring-2 ring-primary/20" />
+        ) : (
+          <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center font-heading font-black text-xl text-primary shrink-0">
+            {coach.name[0].toUpperCase()}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h3 className="font-heading font-bold text-base">{coach.name}</h3>
+              {!coach.is_available && <span className="text-xs text-muted-foreground">(Not accepting bookings)</span>}
+            </div>
+            {isAdmin && (
+              <div className="flex gap-1 shrink-0">
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => onEdit(coach)}>
+                  <Pencil className="w-3.5 h-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => onDelete(coach.id)}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            )}
+          </div>
+          {coach.bio && <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{coach.bio}</p>}
+        </div>
+      </div>
+
+      {coach.specialties?.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {coach.specialties.map(s => (
+            <Badge key={s} variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">{s}</Badge>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-3 pt-1 border-t border-border">
+        <div className="flex flex-col gap-0.5">
+          {coach.price_per_session && <span className="text-xs text-muted-foreground">🎯 {coach.price_per_session}</span>}
+          {coach.subscription_price && <span className="text-xs text-primary">🔄 {coach.subscription_price}</span>}
+        </div>
+        <div className="flex gap-2">
+          {coach.calendly_url && (
+            <a href={coach.calendly_url} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" size="sm" className="font-heading text-xs h-8">
+                <ExternalLink className="w-3.5 h-3.5 mr-1" />Calendly
+              </Button>
+            </a>
+          )}
+          {coach.is_available && (
+            <Button size="sm" onClick={() => onBook(coach)} className="bg-primary hover:bg-primary/90 font-heading text-xs h-8">
+              <Calendar className="w-3.5 h-3.5 mr-1" />Book
+            </Button>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── My Bookings ─────────────────────────────────────────────────────────────
+function MyBookings({ currentUser }) {
+  const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: sessions } = useQuery({
+    queryKey: ['my-sessions', currentUser?.email],
+    queryFn: () => base44.entities.CoachSession.filter({ user_email: currentUser.email }, '-created_date', 20),
+    enabled: !!currentUser,
+    initialData: [],
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (id) => base44.entities.CoachSession.update(id, { status: 'cancelled' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my-sessions'] }),
+  });
+
+  const active = sessions.filter(s => s.status !== 'cancelled');
+  if (active.length === 0) return null;
+
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors">
+        <div className="flex items-center gap-2">
+          <Clock className="w-4 h-4 text-primary" />
+          <span className="font-heading font-semibold text-sm">My Bookings</span>
+          <span className="bg-primary/15 text-primary text-xs font-bold px-2 py-0.5 rounded-full">{active.length}</span>
+        </div>
+        {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
+            <div className="px-4 pb-4 space-y-2 border-t border-border pt-3">
+              {active.map(session => (
+                <div key={session.id} className="flex items-center justify-between bg-secondary rounded-lg px-3 py-2.5 gap-3">
+                  <div>
+                    <p className="text-sm font-medium">{session.coach_name}</p>
+                    <p className="text-xs text-muted-foreground">{session.requested_date} · {session.requested_time} · <span className="capitalize">{session.session_type}</span></p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="outline" className={`${STATUS_COLORS[session.status]} border text-xs`}>{session.status}</Badge>
+                    {session.status === 'pending' && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => cancelMutation.mutate(session.id)}>
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
+export default function Coaching() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [showCoachForm, setShowCoachForm] = useState(false);
+  const [editingCoach, setEditingCoach] = useState(null);
+  const [bookingCoach, setBookingCoach] = useState(null);
+  const queryClient = useQueryClient();
+
+  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
+
+  const isAdmin = currentUser?.role === 'admin';
+
+  const { data: coaches, isLoading } = useQuery({
+    queryKey: ['coaches'],
+    queryFn: () => base44.entities.Coach.list('-created_date', 50),
+    initialData: [],
+  });
+
+  const createCoach = useMutation({
+    mutationFn: (data) => base44.entities.Coach.create(data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['coaches'] }); setShowCoachForm(false); },
+  });
+
+  const updateCoach = useMutation({
+    mutationFn: ({ id, ...data }) => base44.entities.Coach.update(id, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['coaches'] }); setEditingCoach(null); },
+  });
+
+  const deleteCoach = useMutation({
+    mutationFn: (id) => base44.entities.Coach.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['coaches'] }),
+  });
+
+  const bookSession = useMutation({
+    mutationFn: (data) => base44.entities.CoachSession.create({
+      ...data,
+      coach_id: bookingCoach.id,
+      coach_name: bookingCoach.name,
+      user_email: currentUser.email,
+      user_name: currentUser.full_name || currentUser.email,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-sessions'] });
+      setBookingCoach(null);
+    },
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-heading text-2xl md:text-3xl font-bold tracking-tight">Coaches</h1>
+          <p className="text-muted-foreground text-sm mt-1">Work 1-on-1 with a recovery coach. Book a session or subscribe.</p>
+        </div>
+        {isAdmin && !showCoachForm && !editingCoach && (
+          <Button onClick={() => setShowCoachForm(true)} className="bg-primary hover:bg-primary/90 font-heading">
+            <Plus className="w-4 h-4 mr-2" />Add Coach
+          </Button>
+        )}
+      </div>
+
+      {/* Coach form */}
+      <AnimatePresence mode="wait">
+        {showCoachForm && <CoachForm key="create" onSubmit={d => createCoach.mutate(d)} onCancel={() => setShowCoachForm(false)} isSaving={createCoach.isPending} />}
+        {editingCoach && <CoachForm key="edit" initial={editingCoach} onSubmit={d => updateCoach.mutate({ id: editingCoach.id, ...d })} onCancel={() => setEditingCoach(null)} isSaving={updateCoach.isPending} />}
+      </AnimatePresence>
+
+      {/* My bookings */}
+      {currentUser && <MyBookings currentUser={currentUser} />}
+
+      {/* Coach list */}
+      {isLoading ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          {Array(4).fill(0).map((_, i) => (
+            <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-3">
+              <div className="flex gap-4"><Skeleton className="w-14 h-14 rounded-full" /><div className="space-y-2 flex-1"><Skeleton className="h-5 w-32" /><Skeleton className="h-4 w-full" /></div></div>
+              <Skeleton className="h-9 w-full" />
+            </div>
+          ))}
+        </div>
+      ) : coaches.length === 0 ? (
+        <div className="text-center py-16">
+          <UserCheck className="w-12 h-12 text-muted-foreground/20 mx-auto mb-4" />
+          <p className="text-muted-foreground">No coaches available yet.</p>
+          {isAdmin && <p className="text-xs text-muted-foreground/60 mt-1">Add your first coach above.</p>}
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          <AnimatePresence>
+            {coaches.map(coach => (
+              <CoachCard key={coach.id} coach={coach} currentUser={currentUser} isAdmin={isAdmin}
+                onEdit={setEditingCoach} onDelete={id => deleteCoach.mutate(id)} onBook={setBookingCoach} />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Booking modal */}
+      <AnimatePresence>
+        {bookingCoach && (
+          <BookingForm
+            coach={bookingCoach}
+            currentUser={currentUser}
+            onSubmit={d => bookSession.mutate(d)}
+            onCancel={() => setBookingCoach(null)}
+            isSaving={bookSession.isPending}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
