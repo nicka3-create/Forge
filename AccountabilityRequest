@@ -1,0 +1,33 @@
+{
+  "name": "AccountabilityRequest",
+  "type": "object",
+  "properties": {
+    "from_email": {
+      "type": "string",
+      "description": "Email of the user who sent the request"
+    },
+    "from_name": {
+      "type": "string",
+      "description": "Display name of sender"
+    },
+    "to_email": {
+      "type": "string",
+      "description": "Email of the user receiving the request"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "accepted",
+        "declined"
+      ],
+      "default": "pending",
+      "description": "Current status of the request"
+    }
+  },
+  "required": [
+    "from_email",
+    "to_email",
+    "from_name"
+  ]
+}
