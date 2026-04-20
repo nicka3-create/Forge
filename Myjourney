@@ -1,0 +1,222 @@
+import React, { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Button } from '@/components/ui/button';
+import { Plus, Zap, Trash2 } from 'lucide-react';
+import StreakCard from '../components/streak/StreakCard';
+import NewStreakForm from '../components/streak/NewStreakForm';
+import LevelBanner from '../components/badges/LevelBanner';
+import BadgesPanel from '../components/badges/BadgesPanel';
+import DailyCheckIn from '../components/journal/DailyCheckIn';
+import MoodChart from '../components/journal/MoodChart';
+import AccountabilityPanel from '../components/accountability/AccountabilityPanel';
+import MilestoneCelebration from '../components/badges/MilestoneCelebration';
+import { useMilestones } from '../hooks/useMilestones';
+import { Skeleton } from '@/components/ui/skeleton';
+import { getBestDays } from '@/lib/badgeSystem';
+import { format } from 'date-fns';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+
+export default function MyJourney() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const queryClient = useQueryClient();
+  const today = format(new Date(), 'yyyy-MM-dd');
+
+  useEffect(() => {
+    base44.auth.me().then(setCurrentUser).catch(() => {});
+  }, []);
+
+  const { data: streaks, isLoading } = useQuery({
+    queryKey: ['streaks', currentUser?.email],
+    queryFn: () => base44.entities.Streak.filter({ created_by: currentUser.email }),
+    enabled: !!currentUser,
+    initialData: [],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data) => base44.entities.Streak.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['streaks'] });
+      setShowForm(false);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => base44.entities.Streak.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['streaks'] }),
+  });
+
+  const handleDeleteAccount = async () => {
+    setIsDeletingAccount(true);
+    // Delete all user's streaks, posts, and comments before logging out
+    const userEmail = currentUser?.email;
+    if (userEmail) {
+      const userPosts = await base44.entities.Post.filter({ created_by: userEmail });
+      await Promise.all(userPosts.map((p) => base44.entities.Post.delete(p.id)));
+      const userComments = await base44.entities.Comment.filter({ created_by: userEmail });
+      await Promise.all(userComments.map((c) => base44.entities.Comment.delete(c.id)));
+      const userStreaks = await base44.entities.Streak.filter({ created_by: userEmail });
+      await Promise.all(userStreaks.map((s) => base44.entities.Streak.delete(s.id)));
+    }
+    base44.auth.logout('/');
+  };
+
+  const { data: journalEntries, isLoading: isLoadingJournal } = useQuery({
+    queryKey: ['journal', currentUser?.email],
+    queryFn: () => base44.entities.JournalEntry.filter({ created_by: currentUser.email }, '-date', 60),
+    enabled: !!currentUser,
+    initialData: [],
+  });
+
+  const todayEntry = journalEntries.find((e) => e.date === today);
+
+  const journalMutation = useMutation({
+    mutationFn: async (data) => {
+      if (todayEntry) {
+        return base44.entities.JournalEntry.update(todayEntry.id, data);
+      }
+      return base44.entities.JournalEntry.create({ ...data, date: today });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['journal'] }),
+  });
+
+  const bestDays = getBestDays(streaks);
+
+  const { newBadge, clearNewBadge } = useMilestones({
+    currentUser,
+    streaks,
+    journalEntries,
+    enabled: !!currentUser && !isLoading && !isLoadingJournal,
+  });
+
+  return (
+    <div className="space-y-6">
+      <MilestoneCelebration badge={newBadge} onClose={clearNewBadge} />
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-heading text-2xl md:text-3xl font-bold tracking-tight">My Journey</h1>
+          <p className="text-muted-foreground text-sm mt-1">Track your streaks. Every day counts.</p>
+        </div>
+        {!showForm && (
+          <Button
+            onClick={() => setShowForm(true)}
+            className="bg-primary hover:bg-primary/90 font-heading"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            New Streak
+          </Button>
+        )}
+      </div>
+
+      {/* Level Banner */}
+      {!isLoading && (
+        <LevelBanner bestDays={bestDays} userName={currentUser?.full_name} />
+      )}
+
+      {showForm && (
+        <NewStreakForm
+          onSubmit={(data) => createMutation.mutate(data)}
+          onCancel={() => setShowForm(false)}
+        />
+      )}
+
+      {/* Streaks */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {isLoading ? (
+          Array(2).fill(0).map((_, i) => (
+            <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-3">
+              <Skeleton className="h-8 w-8" />
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-10 w-24" />
+            </div>
+          ))
+        ) : streaks.length === 0 && !showForm ? (
+          <div className="col-span-full text-center py-12">
+            <Zap className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+            <p className="text-muted-foreground mb-4">No active streaks yet.</p>
+            <Button onClick={() => setShowForm(true)} variant="outline" className="font-heading">
+              <Plus className="w-4 h-4 mr-2" />
+              Start Your First Streak
+            </Button>
+          </div>
+        ) : (
+          streaks.map((streak) => (
+            <StreakCard key={streak.id} streak={streak} onDelete={(id) => deleteMutation.mutate(id)} />
+          ))
+        )}
+      </div>
+
+      {/* Badges Panel */}
+      {!isLoading && (
+        <BadgesPanel streaks={streaks} userEmail={currentUser?.email} />
+      )}
+
+      {/* Daily Check-In */}
+      <DailyCheckIn
+        existingEntry={todayEntry}
+        onSubmit={(data) => journalMutation.mutate(data)}
+        isSubmitting={journalMutation.isPending}
+      />
+
+      {/* Mood Trend Chart */}
+      {!isLoadingJournal && <MoodChart entries={journalEntries} />}
+
+      {/* Accountability Panel */}
+      {currentUser && <AccountabilityPanel currentUser={currentUser} />}
+
+      {/* Motivational quote */}
+      {streaks.length > 0 && (
+        <div className="bg-card border border-primary/20 rounded-xl p-6 text-center">
+          <p className="font-heading text-lg font-medium text-primary italic">
+            "The only person you need to be better than is the person you were yesterday."
+          </p>
+        </div>
+      )}
+
+      {/* Danger Zone — Delete Account */}
+      <div className="border border-destructive/20 rounded-xl p-5 space-y-3">
+        <h3 className="font-heading font-semibold text-sm text-destructive/80 uppercase tracking-wide">Danger Zone</h3>
+        <p className="text-sm text-muted-foreground">
+          Permanently delete your account and all your data — streaks, posts, and comments. This cannot be undone.
+        </p>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" size="sm" className="font-heading" disabled={isDeletingAccount}>
+              <Trash2 className="w-4 h-4 mr-2" />
+              {isDeletingAccount ? 'Deleting…' : 'Delete Account'}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent className="bg-card border-border">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="font-heading">Are you absolutely sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete all your streaks, posts, and comments. There is no going back.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="font-heading">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteAccount}
+                className="bg-destructive hover:bg-destructive/90 font-heading"
+              >
+                Yes, delete everything
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </div>
+  );
+}
