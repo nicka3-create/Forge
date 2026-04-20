@@ -42,4 +42,52 @@ function BadgeTile({ badge, earned, index }) {
         </motion.div>
       )}
     </motion.div>
- 
+  );
+}
+
+export default function BadgesPanel({ streaks, userEmail }) {
+  const { data: earnedMilestones } = useQuery({
+    queryKey: ['user-milestones', userEmail],
+    queryFn: () => base44.entities.UserMilestone.filter({ user_email: userEmail }),
+    enabled: !!userEmail,
+    initialData: [],
+  });
+
+  const earnedIds = new Set(earnedMilestones.map(m => m.badge_id));
+  const totalEarned = earnedIds.size;
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-5 space-y-5">
+      <div className="flex items-center justify-between">
+        <h2 className="font-heading font-bold text-lg">Badges & Milestones</h2>
+        <span className="text-xs bg-primary/15 text-primary px-2.5 py-1 rounded-full font-medium">
+          {totalEarned} / {MILESTONES.length} earned
+        </span>
+      </div>
+
+      {Object.entries(MILESTONE_CATEGORIES).map(([catKey, { label, icon }]) => {
+        const catBadges = MILESTONES.filter(m => m.category === catKey);
+        const catEarned = catBadges.filter(m => earnedIds.has(m.id));
+
+        return (
+          <div key={catKey}>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-sm">{icon}</span>
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{label}</p>
+              <span className="text-xs text-muted-foreground/60 ml-auto">{catEarned.length}/{catBadges.length}</span>
+            </div>
+            <div className="grid grid-cols-4 gap-3 sm:grid-cols-5 md:grid-cols-6">
+              {catBadges.map((badge, i) => (
+                <BadgeTile key={badge.id} badge={badge} earned={earnedIds.has(badge.id)} index={i} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {totalEarned === 0 && (
+        <p className="text-sm text-muted-foreground text-center py-2">Keep going — your first badge is just around the corner!</p>
+      )}
+    </div>
+  );
+}
