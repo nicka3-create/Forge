@@ -1,0 +1,23 @@
+{
+  "name": "UserMilestone",
+  "type": "object",
+  "properties": {
+    "badge_id": {
+      "type": "string",
+      "description": "Unique ID of the badge awarded"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "Email of the user who earned this"
+    },
+    "seen": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the user has seen the celebration popup"
+    }
+  },
+  "required": [
+    "badge_id",
+    "user_email"
+  ]
+}
