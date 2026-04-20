@@ -1,0 +1,59 @@
+{
+  "name": "CoachSession",
+  "type": "object",
+  "properties": {
+    "coach_id": {
+      "type": "string",
+      "description": "ID of the Coach"
+    },
+    "coach_name": {
+      "type": "string",
+      "description": "Name of the coach (denormalized)"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "Email of the user booking"
+    },
+    "user_name": {
+      "type": "string",
+      "description": "Name of the user booking"
+    },
+    "requested_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Preferred date for the session"
+    },
+    "requested_time": {
+      "type": "string",
+      "description": "Preferred time e.g. '10:00 AM'"
+    },
+    "session_type": {
+      "type": "string",
+      "enum": [
+        "one-time",
+        "subscription"
+      ],
+      "default": "one-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "confirmed",
+        "cancelled"
+      ],
+      "default": "pending"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Any notes from the user for the coach"
+    }
+  },
+  "required": [
+    "coach_id",
+    "coach_name",
+    "user_email",
+    "requested_date",
+    "requested_time"
+  ]
+}
