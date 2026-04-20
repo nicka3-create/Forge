@@ -1,0 +1,179 @@
+import React, { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Check, User, Target, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { motion } from 'framer-motion';
+
+const RECOVERY_GOALS = [
+  { id: 'sobriety_streak',     label: 'Sobriety Streak',        desc: 'Maintain clean days without relapse' },
+  { id: 'daily_checkin',       label: 'Daily Check-In',         desc: 'Log your mood & clarity every day' },
+  { id: 'reduce_cravings',     label: 'Reduce Cravings',        desc: 'Track and lower addiction urge levels' },
+  { id: 'mental_clarity',      label: 'Mental Clarity',         desc: 'Improve focus and mental sharpness' },
+  { id: 'community_support',   label: 'Community Support',      desc: 'Engage with the community regularly' },
+  { id: 'accountability',      label: 'Accountability Partner', desc: 'Stay connected with a partner' },
+  { id: 'learn_resources',     label: 'Learn & Grow',           desc: 'Read articles and listen to audio guides' },
+  { id: 'physical_health',     label: 'Physical Health',        desc: 'Improve energy, sleep, and exercise' },
+  { id: 'journaling',          label: 'Daily Journaling',       desc: 'Reflect and write notes each day' },
+  { id: 'professional_help',   label: 'Professional Coaching',  desc: 'Work with a coach or counselor' },
+];
+
+const ADDICTION_OPTIONS = [
+  'Alcohol', 'Nicotine', 'Pornography', 'Drugs', 'Gambling',
+  'Social Media', 'Food / Binge Eating', 'Gaming', 'Shopping', 'Other',
+];
+
+export default function Settings() {
+  const [user, setUser] = useState(null);
+  const [form, setForm] = useState({ full_name: '', bio: '', addiction_type: '', recovery_goals: [] });
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    base44.auth.me().then(u => {
+      setUser(u);
+      setForm({
+        full_name: u.full_name || '',
+        bio: u.bio || '',
+        addiction_type: u.addiction_type || '',
+        recovery_goals: u.recovery_goals || [],
+      });
+    }).catch(() => {});
+  }, []);
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const toggleGoal = (id) => {
+    setForm(f => ({
+      ...f,
+      recovery_goals: f.recovery_goals.includes(id)
+        ? f.recovery_goals.filter(g => g !== id)
+        : [...f.recovery_goals, id],
+    }));
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    await base44.auth.updateMe({
+      bio: form.bio,
+      addiction_type: form.addiction_type,
+      recovery_goals: form.recovery_goals,
+    });
+    setIsSaving(false);
+    toast.success('Settings saved!');
+  };
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-8">
+      <div>
+        <h1 className="font-heading text-2xl md:text-3xl font-bold tracking-tight">Settings</h1>
+        <p className="text-muted-foreground text-sm mt-1">Update your profile and recovery preferences.</p>
+      </div>
+
+      {/* Profile Section */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-xl p-6 space-y-4">
+        <div className="flex items-center gap-2 mb-1">
+          <User className="w-4 h-4 text-primary" />
+          <h2 className="font-heading font-bold text-base">Profile</h2>
+        </div>
+
+        {/* Avatar + name (name is read-only) */}
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center text-xl font-bold font-heading text-primary shrink-0">
+            {(user.full_name || 'U')[0].toUpperCase()}
+          </div>
+          <div className="flex-1 space-y-1">
+            <p className="font-heading font-semibold text-sm">{user.full_name || 'Anonymous'}</p>
+            <p className="text-xs text-muted-foreground">{user.email}</p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground font-medium block mb-1">Bio</label>
+            <Textarea
+              placeholder="Tell the community a little about yourself…"
+              value={form.bio}
+              onChange={e => set('bio', e.target.value)}
+              className="bg-secondary border-border min-h-[80px]"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground font-medium block mb-1">Primary Addiction Type</label>
+            <div className="flex flex-wrap gap-2">
+              {ADDICTION_OPTIONS.map(opt => (
+                <button
+                  key={opt}
+                  onClick={() => set('addiction_type', form.addiction_type === opt ? '' : opt)}
+                  className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${
+                    form.addiction_type === opt
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-secondary text-muted-foreground border-border hover:text-foreground'
+                  }`}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Recovery Goals Section */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="bg-card border border-border rounded-xl p-6 space-y-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Target className="w-4 h-4 text-primary" />
+          <h2 className="font-heading font-bold text-base">Recovery Goals</h2>
+        </div>
+        <p className="text-xs text-muted-foreground -mt-2">Choose the goals you want to focus on in your recovery journey.</p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {RECOVERY_GOALS.map(goal => {
+            const active = form.recovery_goals.includes(goal.id);
+            return (
+              <button
+                key={goal.id}
+                onClick={() => toggleGoal(goal.id)}
+                className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                  active
+                    ? 'border-primary/50 bg-primary/10'
+                    : 'border-border bg-secondary/40 hover:bg-secondary'
+                }`}
+              >
+                <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                  active ? 'bg-primary border-primary' : 'border-muted-foreground/40'
+                }`}>
+                  {active && <Check className="w-3 h-3 text-white" />}
+                </div>
+                <div>
+                  <p className={`text-sm font-heading font-semibold leading-tight ${active ? 'text-primary' : 'text-foreground'}`}>{goal.label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{goal.desc}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </motion.div>
+
+      {/* Save */}
+      <Button
+        onClick={handleSave}
+        disabled={isSaving}
+        className="w-full bg-primary hover:bg-primary/90 font-heading h-11"
+      >
+        {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
+        {isSaving ? 'Saving…' : 'Save Settings'}
+      </Button>
+    </div>
+  );
+}
